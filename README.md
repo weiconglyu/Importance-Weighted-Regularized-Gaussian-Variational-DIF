@@ -1,3 +1,3 @@
-# Regularized-Gaussian-Variational-DIF
+# Importance-Weigthted-Regularized-Gaussian-Variational-DIF
 
-Simulation code for the Regularized Gaussian Variational DIF paper
+Simulation code for the Importance Weighted Regularized Gaussian Variational DIF paper
