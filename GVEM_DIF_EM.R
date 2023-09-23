@@ -1,6 +1,4 @@
 library(torch)
-library(cubature)
-library(mvnfast)
 
 varlist <- function(...) {
   setNames(list(...), as.character(substitute(alist(...)))[-1])
@@ -31,7 +29,7 @@ EM <- function(Y, D, X, eta, Sigma, Mu, a, b, gamma, beta, lambda, iter = 1000, 
   }
   
   parameters <- function() {
-    varlist(Sigma, Mu, a, b, gamma, beta)
+    varlist(SIGMA, MU, Sigma, Mu, a, b, gamma, beta)
   }
   
   update <- function(lambda, gamma.mask, beta.mask) {
@@ -61,20 +59,21 @@ EM <- function(Y, D, X, eta, Sigma, Mu, a, b, gamma, beta, lambda, iter = 1000, 
       }))
       
       MU$unsqueeze_(2)
-      SIGMA.MU <- (SIGMA + MU$transpose(2, 3)$matmul(MU))$unsqueeze(2)
-      xi <- (BB$square() - 2 * BB * AG.t$matmul(MU$unsqueeze(4))$view(c(N, -1)) + AG.t$matmul(SIGMA.MU)$matmul(AG)$view(c(N, -1)))$sqrt()
-      eta <- torch_where(abs(xi) < 0.01, 0.125, (1 / (1 + exp(-xi)) - 0.5) / (2 * xi))
-      a <- (2 * a.mask.diag$transpose(2, 3)$matmul(eta$view(c(N, -1, 1, 1)) * SIGMA.MU)$matmul(a.mask.diag))$sum(1)$pinverse()$matmul(
-        ((Y$unsqueeze(3) - 0.5) * MU + 2 * eta$unsqueeze(3) * (BB$unsqueeze(3) * MU - SIGMA.MU$matmul(gamma[X]$unsqueeze(4))$squeeze(4)))$sum(1)$unsqueeze(3))$squeeze(3)
-      b <- ((0.5 - Y) + 2 * eta * (beta[X] + MU$unsqueeze(3)$matmul(AG)$view(c(N, -1))))$sum(1) / (2 * eta$sum(1))
+      sigma.mu <- a.mask.diag$transpose(2, 3)$matmul((SIGMA + MU$transpose(2, 3)$matmul(MU))$unsqueeze(2))$matmul(a.mask.diag)
+      mu <- MU$mul(a.mask)
+      xi <- (BB$square() - 2 * BB * AG.t$matmul(mu$unsqueeze(4))$view(c(N, -1)) + AG.t$matmul(sigma.mu)$matmul(AG)$view(c(N, -1)))$sqrt()$mul((AG.t$matmul(mu$unsqueeze(4))$view(c(N, -1)) - BB)$sign())
+      eta <- torch_where(abs(xi) < 1e-3, 0.125, (1 / (1 + exp(-xi)) - 0.5) / (2 * xi))
+      a <- (2 * eta$view(c(N, -1, 1, 1)) * sigma.mu)$sum(1)$pinverse()$matmul(
+        ((Y$unsqueeze(3) - 0.5) * mu + 2 * eta$unsqueeze(3) * (BB$unsqueeze(3) * mu - sigma.mu$matmul(gamma[X]$unsqueeze(4))$squeeze(4)))$sum(1)$unsqueeze(3))$squeeze(3)$masked_fill(!a.mask, 0)
+      b <- ((0.5 - Y) + 2 * eta * (beta[X] + mu$unsqueeze(3)$matmul(AG)$view(c(N, -1))))$sum(1) / (2 * eta$sum(1))
       gamma <- torch_stack(tapply(1:N, X, function(n) {
-        env$regularize(((Y[n]$unsqueeze(3) - 0.5) * MU[n] + 2 * eta[n]$unsqueeze(3) *
-                          (BB[n]$unsqueeze(3) * MU[n] - SIGMA.MU[n]$matmul(a$unsqueeze(3))$squeeze(4)))$sum(1)) /
-          (2 * eta[n]$view(c(length(n), -1, 1, 1)) * SIGMA.MU[n])$sum(1)$diagonal(dim1 = 2, dim2 = 3)
-      }))$mul(env$gamma.mask)
+        env$regularize(((Y[n]$unsqueeze(3) - 0.5) * mu[n] + 2 * eta[n]$unsqueeze(3) *
+                          (BB[n]$unsqueeze(3) * mu[n] - sigma.mu[n]$matmul(a$unsqueeze(3))$squeeze(4)))$sum(1)) /
+          (2 * eta[n]$view(c(length(n), -1, 1, 1)) * sigma.mu[n])$sum(1)$diagonal(dim1 = 2, dim2 = 3)
+      }))$masked_fill(!env$gamma.mask, 0)
       beta <- torch_stack(tapply(1:N, X, function(n) {
-        env$regularize(((Y[n] - 0.5) + eta[n] * (b$unsqueeze(1) - MU[n]$unsqueeze(2)$matmul(AG[n])$view(c(length(n), -1))))$sum(1)) / (2 * eta[n]$sum(1))
-      }))$mul(env$beta.mask)
+        env$regularize(((Y[n] - 0.5) + 2 * eta[n] * (b$unsqueeze(1) - mu[n]$unsqueeze(3)$matmul(AG[n])$view(c(length(n), -1))))$sum(1)) / (2 * eta[n]$sum(1))
+      }))$masked_fill(!env$beta.mask, 0)
       MU$squeeze_(2)
       
       mu <- Mu[1]$clone()
@@ -109,44 +108,43 @@ EM <- function(Y, D, X, eta, Sigma, Mu, a, b, gamma, beta, lambda, iter = 1000, 
     else
       params.old <- params.new
   }
-  print(i)
-  
   c(n = i, varlist(xi, eta, SIGMA, MU, Sigma, Mu, a, b, gamma, beta))
 }
+
+# library(cubature)
+# library(mvnfast)
+# IC <- function(Y, X, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, cons) {
+#   N <- nrow(Y)
+#   Q <- sum(sapply(1:N, function(n) {
+#     ag <- a + gamma[X[n], , ]
+#     bb <- b - beta[X[n]]
+#     mu <- Mu[X[n], ]
+#     sigma <- Sigma[X[n], , ]
+#     density <- function(theta) {
+#       t(colProds(dbinom(Y[n, ], 1, 1 / (1 + exp(-(ag %*% theta - bb))))) * dmvn(t(theta), mu, sigma))
+#     }
+#     log(hcubature(density, rep(-2, 2), rep(2, 2), vectorInterface = T)$integral)
+#   }))
+#   l0 <- as.array(sum(gamma != 0) + sum(beta != 0))
+#   c(ll = Q, BIC = -2 * Q + l0 * log(N), GIC = -2 * Q + cons * l0 * log(N) * log(log(N)))
+# }
 
 
 IC <- function(Y, X, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, cons) {
   N <- nrow(Y)
-  Q <- sum(sapply(1:N, function(n) {
-    ag <- a + gamma[X[n], , ]
-    bb <- b - beta[X[n]]
-    mu <- Mu[X[n], ]
-    sigma <- Sigma[X[n], , ]
-    density <- function(theta) {
-      t(colProds(dbinom(Y[n, ], 1, 1 / (1 + exp(-(ag %*% theta - bb))))) * dmvn(t(theta), mu, sigma))
-    }
-    log(hcubature(density, rep(-2, 2), rep(2, 2), vectorInterface = T)$integral)
-  }))
-  l0 <- as.array(sum(gamma != 0) + sum(beta != 0))
-  c(ll = Q, BIC = -2 * Q + l0 * log(N), GIC = -2 * Q + cons * l0 * log(N) * log(log(N)))
+  K <- max(X)
+  Y <- torch_tensor(Y)
+  AG <- (a + gamma)[X]$unsqueeze(4)
+  AG.t <- AG$transpose(3, 4)
+  BB <- (b - beta)[X]
+  MU <- MU$clone()$unsqueeze_(2)
+  SIGMA.MU <- (SIGMA + MU$transpose(2, 3)$matmul(MU))$unsqueeze(2)
+
+  MU$unsqueeze_(4)
+  xi <- (BB$square() - 2 * BB * AG.t$matmul(MU)$view(c(N, -1)) + AG.t$matmul(SIGMA.MU)$matmul(AG)$view(c(N, -1)))$sqrt()$mul((AG.t$matmul(MU)$view(c(N, -1)) - BB)$sign())
+  mu <- MU$squeeze(2) - Mu[X]$unsqueeze(3)
+  Q <- as_array((nnf_logsigmoid(xi) + (0.5 - Y) * (BB - AG.t$matmul(MU)$view(c(N, -1))) - xi / 2)$sum()
+                - (Sigma$logdet()[X]$sum() + (linalg_solve(Sigma[X], SIGMA + mu$matmul(mu$transpose(2, 3)))$diagonal(dim1 = 2, dim2 = 3))$sum()) / 2)
+  l0 <- as_array(sum(gamma != 0) + sum(beta != 0))
+  c(ll = Q, AIC = -2 * Q + l0 * 2, BIC = -2 * Q + l0 * log(N), GIC = -2 * Q + cons * l0 * log(N) * log(log(N)))
 }
-
-
-# IC <- function(Y, X, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, cons) {
-#   N <- nrow(Y)
-#   K <- max(X)
-#   Y <- torch_tensor(Y)
-#   AG <- (a + gamma)[X]$unsqueeze(4)
-#   AG.t <- AG$transpose(3, 4)
-#   BB <- (b - beta)[X]
-#   MU <- MU$clone()$unsqueeze_(2)
-#   SIGMA.MU <- (SIGMA + MU$transpose(2, 3)$matmul(MU))$unsqueeze(2)
-#   
-#   MU$unsqueeze_(4)
-#   xi <- (BB$square() - 2 * BB * AG.t$matmul(MU)$view(c(N, -1)) + AG.t$matmul(SIGMA.MU)$matmul(AG)$view(c(N, -1)))$sqrt()$mul((AG.t$matmul(MU)$view(c(N, -1)) - BB)$sign())
-#   mu <- MU$squeeze(2) - Mu[X]$unsqueeze(3)
-#   Q <- as_array((nnf_logsigmoid(xi) + (0.5 - Y) * (BB - AG.t$matmul(MU)$view(c(N, -1))) - xi / 2)$sum()
-#                 - (Sigma$logdet()[X]$sum() + (linalg_solve(Sigma[X], SIGMA + mu$matmul(mu$transpose(2, 3)))$diagonal(dim1 = 2, dim2 = 3))$sum()) / 2)
-#   l0 <- as_array(sum(gamma != 0) + sum(beta != 0))
-#   c(ll = Q, BIC = -2 * Q + l0 * log(N), GIC = -2 * Q + cons * l0 * log(N) * log(log(N)))
-# }

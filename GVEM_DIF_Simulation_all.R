@@ -15,7 +15,9 @@ library(RcppParallel)
 library(RcppArmadillo)
 source('GVEM_DIF_Simulation_Functions.R')
 
-lbd.vec <- seq(0, 1, by = 0.1)
+lbd.vec <- seq(0.4, 0.9, by = 0.05)
+# constant used in calculating GIC. 
+cons <- 1
 
 #######################
 #    Simulation 1
@@ -90,8 +92,6 @@ for (N_condition in 1:2){
         eta[(Ny0+1):(Ny0+Ny),]=initelse$eta0
         eps[(Ny0+1):(Ny0+Ny),]=initelse$eps0
       }
-      # constant used in calculating GIC. 
-      cons=5
       
       #lbd.vec=seq(10,100,10)
       results <- lapply(lbd.vec, function(lbd) {
@@ -99,14 +99,17 @@ for (N_condition in 1:2){
         result
       })
       
-      ll <- sapply(results, `[[`, 'll')
-      bics <- sapply(results, `[[`, 'BIC')
-      gics <- sapply(results, `[[`, 'GIC')
-      result.bic <- results[[which.min(bics)]]
-      result.gic <- results[[which.min(gics)]]
-      print(c(result.bic$lbd, result.gic$lbd))
+      aic <- sapply(results, `[[`, 'AIC')
+      bic <- sapply(results, `[[`, 'BIC')
+      gic <- sapply(results, `[[`, 'GIC')
+      result.aic <- results[[which.min(aic)]]
+      result.bic <- results[[which.min(bic)]]
+      result.gic <- results[[which.min(gic)]]
+      print(c(result.aic$lbd, result.bic$lbd, result.gic$lbd))
+      print(round(result.aic$beta, 3))
+      print(round(result.bic$beta, 3))
       print(round(result.gic$beta, 3))
-      save(results, bics, gics, result.bic, result.gic, file = paste0('GVEM_Sim1_Condition', condition, '_', rep, '.RData'))
+      save(results, aic, bic, gic, result.aic, result.bic, result.gic, file = paste0('GVEM_Sim1_Condition', condition, '_', rep, '.RData'))
     }
   }
 }
@@ -179,22 +182,24 @@ for (N_condition in 1:2){
         eta[(Ny0+1):(Ny0+Ny),]=initelse$eta0
         eps[(Ny0+1):(Ny0+Ny),]=initelse$eps0
       }
-      # constant used in calculating GIC. 
-      cons=3
-      
+
       #lbd.vec=seq(20,48,4)
       results <- lapply(lbd.vec, function(lbd) {
         print(system.time(result <- Reg_VEMM_DIF(resp,indic,lbd,eta,eps,Group,Unif,domain,y,Groupind,N.vec,gra00,grd00,grbeta00,grgamma00,Mu.list,Sig.list,cons)))
         result
       })
       
-      bics <- sapply(results, `[[`, 'BIC')
-      gics <- sapply(results, `[[`, 'GIC')
-      result.bic <- results[[which.min(bics)]]
-      result.gic <- results[[which.min(gics)]]
-      print(c(result.bic$lbd, result.gic$lbd))
+      aic <- sapply(results, `[[`, 'AIC')
+      bic <- sapply(results, `[[`, 'BIC')
+      gic <- sapply(results, `[[`, 'GIC')
+      result.aic <- results[[which.min(aic)]]
+      result.bic <- results[[which.min(bic)]]
+      result.gic <- results[[which.min(gic)]]
+      print(c(result.aic$lbd, result.bic$lbd, result.gic$lbd))
+      print(round(result.aic$beta, 3))
+      print(round(result.bic$beta, 3))
       print(round(result.gic$beta, 3))
-      save(results, bics, gics, result.bic, result.gic, file = paste0('GVEM_Sim2_Condition', condition, '_', rep, '.RData'))
+      save(results, aic, bic, gic, result.aic, result.bic, result.gic, file = paste0('GVEM_Sim2_Condition', condition, '_', rep, '.RData'))
     }
   }
 }
@@ -266,22 +271,24 @@ for (N_condition in 1:2){
         eta[(Ny0+1):(Ny0+Ny),]=initelse$eta0
         eps[(Ny0+1):(Ny0+Ny),]=initelse$eps0
       }
-      # constant used in calculating GIC. 
-      cons=3
-      
+
       #lbd.vec=seq(10,50,5)
       results <- lapply(lbd.vec, function(lbd) {
         print(system.time(result <- Reg_VEMM_DIF(resp,indic,lbd,eta,eps,Group,Unif,domain,y,Groupind,N.vec,gra00,grd00,grbeta00,grgamma00,Mu.list,Sig.list,cons)))
         result
       })
       
-      bics <- sapply(results, `[[`, 'BIC')
-      gics <- sapply(results, `[[`, 'GIC')
-      result.bic <- results[[which.min(bics)]]
-      result.gic <- results[[which.min(gics)]]
-      print(c(result.bic$lbd, result.gic$lbd))
+      aic <- sapply(results, `[[`, 'AIC')
+      bic <- sapply(results, `[[`, 'BIC')
+      gic <- sapply(results, `[[`, 'GIC')
+      result.aic <- results[[which.min(aic)]]
+      result.bic <- results[[which.min(bic)]]
+      result.gic <- results[[which.min(gic)]]
+      print(c(result.aic$lbd, result.bic$lbd, result.gic$lbd))
+      print(round(result.aic$beta, 3))
+      print(round(result.bic$beta, 3))
       print(round(result.gic$beta, 3))
-      save(results, bics, gics, result.bic, result.gic, file = paste0('GVEM_Sim3_Condition', condition, '_', rep, '.RData'))
+      save(results, aic, bic, gic, result.aic, result.bic, result.gic, file = paste0('GVEM_Sim3_Condition', condition, '_', rep, '.RData'))
     }
   }
 }
