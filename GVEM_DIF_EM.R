@@ -1,11 +1,20 @@
 library(torch)
 
+# rm(list = ls())
+# load('em.RData')
+
 varlist <- function(...) {
   setNames(list(...), as.character(substitute(alist(...)))[-1])
 }
 
+prox <- function(x, lambda) {
+  sign(x) * (abs(x) - lambda)$maximum(0)
+}
 
-EM <- function(Y, D, X, eta, Sigma, Mu, a, b, gamma, beta, lambda, iter = 1000, eps = 1e-3) {
+EM <- function(Y, D, X, eta, Sigma, Mu, a, b, gamma, beta, lambda, iter = 100, eps = 1e-3) {
+  # save(list = ls(), file = 'em.RData')
+  # stop()
+  
   init <- function() {
     with(parent.frame(), {
       N <- nrow(Y)
@@ -33,12 +42,8 @@ EM <- function(Y, D, X, eta, Sigma, Mu, a, b, gamma, beta, lambda, iter = 1000, 
   }
   
   update <- function(lambda, gamma.mask, beta.mask) {
-    regularize <- function(x) {
-      x$sign() * (x$abs() - lambda)$maximum(0)
-    }
-
     with(parent.frame(), {
-      env <- sys.frame(-4)
+      args <- sys.frame(-4)
       aG <- (a + gamma)$unsqueeze(4)
       aG.t <- aG$transpose(3, 4)
       AG <- aG[X]
@@ -61,24 +66,24 @@ EM <- function(Y, D, X, eta, Sigma, Mu, a, b, gamma, beta, lambda, iter = 1000, 
       MU$unsqueeze_(2)
       sigma.mu <- a.mask.diag$transpose(2, 3)$matmul((SIGMA + MU$transpose(2, 3)$matmul(MU))$unsqueeze(2))$matmul(a.mask.diag)
       mu <- MU$mul(a.mask)
-      xi <- (BB$square() - 2 * BB * AG.t$matmul(mu$unsqueeze(4))$view(c(N, -1)) + AG.t$matmul(sigma.mu)$matmul(AG)$view(c(N, -1)))$sqrt()$mul((AG.t$matmul(mu$unsqueeze(4))$view(c(N, -1)) - BB)$sign())
+      xi <- (BB$square() - 2 * BB * AG.t$matmul(mu$unsqueeze(4))$view(c(N, -1)) + AG.t$matmul(sigma.mu)$matmul(AG)$view(c(N, -1)))$sqrt()#$mul((AG.t$matmul(mu$unsqueeze(4))$view(c(N, -1)) - BB)$sign())
       eta <- torch_where(abs(xi) < 1e-3, 0.125, (1 / (1 + exp(-xi)) - 0.5) / (2 * xi))
       a <- (2 * eta$view(c(N, -1, 1, 1)) * sigma.mu)$sum(1)$pinverse()$matmul(
         ((Y$unsqueeze(3) - 0.5) * mu + 2 * eta$unsqueeze(3) * (BB$unsqueeze(3) * mu - sigma.mu$matmul(gamma[X]$unsqueeze(4))$squeeze(4)))$sum(1)$unsqueeze(3))$squeeze(3)$masked_fill(!a.mask, 0)
       b <- ((0.5 - Y) + 2 * eta * (beta[X] + mu$unsqueeze(3)$matmul(AG)$view(c(N, -1))))$sum(1) / (2 * eta$sum(1))
       gamma <- torch_stack(tapply(1:N, X, function(n) {
-        env$regularize(((Y[n]$unsqueeze(3) - 0.5) * mu[n] + 2 * eta[n]$unsqueeze(3) *
-                          (BB[n]$unsqueeze(3) * mu[n] - sigma.mu[n]$matmul(a$unsqueeze(3))$squeeze(4)))$sum(1)) /
+        prox(((Y[n]$unsqueeze(3) - 0.5) * mu[n] + 2 * eta[n]$unsqueeze(3) *
+                          (BB[n]$unsqueeze(3) * mu[n] - sigma.mu[n]$matmul(a$unsqueeze(3))$squeeze(4)))$sum(1), args$lambda) /
           (2 * eta[n]$view(c(length(n), -1, 1, 1)) * sigma.mu[n])$sum(1)$diagonal(dim1 = 2, dim2 = 3)
-      }))$masked_fill(!env$gamma.mask, 0)
+      }))$masked_fill(!args$gamma.mask, 0)
       beta <- torch_stack(tapply(1:N, X, function(n) {
-        env$regularize(((Y[n] - 0.5) + 2 * eta[n] * (b$unsqueeze(1) - mu[n]$unsqueeze(3)$matmul(AG[n])$view(c(length(n), -1))))$sum(1)) / (2 * eta[n]$sum(1))
-      }))$masked_fill(!env$beta.mask, 0)
+        prox(((Y[n] - 0.5) + 2 * eta[n] * (b$unsqueeze(1) - mu[n]$unsqueeze(3)$matmul(AG[n])$view(c(length(n), -1))))$sum(1), args$lambda) / (2 * eta[n]$sum(1))
+      }))$masked_fill(!args$beta.mask, 0)
       MU$squeeze_(2)
       
       mu <- Mu[1]$clone()
-      Mu$sub_(mu)
       MU$sub_(mu)
+      Mu$sub_(mu)
       b$sub_(a$matmul(mu))
       beta$add_(gamma$matmul(mu))
       rescale <- Sigma[1]$diag()$sqrt()
@@ -148,3 +153,6 @@ IC <- function(Y, X, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, cons) {
   l0 <- as_array(sum(gamma != 0) + sum(beta != 0))
   c(ll = Q, AIC = -2 * Q + l0 * 2, BIC = -2 * Q + l0 * log(N), GIC = -2 * Q + cons * l0 * log(N) * log(log(N)))
 }
+
+
+#tmp <- EM(Y, D, X, eta, Sigma, Mu, a, b, gamma, beta, lambda)

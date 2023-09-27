@@ -28,13 +28,13 @@ cons <- 1
 ###################################
 
 # Study 1 four conditions 
-condition=0
+condition=1
 Nvec=c(500,1000)
 J=20 #test length
 for (N_condition in 1:2){
   N1=N2=N3=Nvec[N_condition] # sample size each group
   N=N1+N2+N3
-  for (DIF_condition in 1:2){
+  for (DIF_condition in 2:2){
     # read in MBR data
     params=read.csv(paste0("../Para",DIF_condition,".csv"),row.names = 1)
     condition=condition+1

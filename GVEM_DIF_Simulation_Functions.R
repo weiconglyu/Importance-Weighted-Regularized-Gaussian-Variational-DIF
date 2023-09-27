@@ -118,10 +118,12 @@ Reg_VEMM_DIF <- function(resp,indic,lbd,eta,eps,Group,Unif,domain,y,G,N.vec,gra0
   lambda <- sqrt(person) * lbd
   list2env(EM(resp, indic, Gind, eta, Sigma, Mu, new_a, new_b, new_gamma, new_beta, lambda), environment())
   print(n)
+  list2env(IW(resp, indic, Gind, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, lambda), environment())
+  print(n)
   list2env(as.list(IC(resp, Gind, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, cons)), environment())
 
   varlist <- function(...) {
     setNames(lapply(list(...), as.array), as.character(substitute(alist(...)))[-1])
   }
-  varlist(lbd, lambda, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, n, ll, AIC, BIC, GIC)
+  varlist(lbd, lambda, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, ll, AIC, BIC, GIC)
 }
