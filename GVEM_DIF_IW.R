@@ -89,7 +89,7 @@ IW <- function(Y, D, X, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, lambda, S = 10,
       x$set_data(z.new)
     }
     
-    # prox <- function(x, state, params) {
+    # adaprox <- function(x, state, params) {
     #   betat <- params$beta ^ state$step
     #   eta <- params$lr / (1 - betat[1]) / (sqrt(state$max_exp_avg_sq / (1 - betat[2])) + params$eps)
     #   x$set_data(x$sign() * (x$abs() - lambda * eta)$maximum(0))
@@ -209,4 +209,5 @@ IW <- function(Y, D, X, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, lambda, S = 10,
 # beta<-torch_tensor(beta)
 # IW(Y, D, X, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, lambda)
 
-#tmp <- IW(Y, D, X, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, lambda)
+
+#tmp <- IW(Y, D, X, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, lambda, lr = 0.05)
