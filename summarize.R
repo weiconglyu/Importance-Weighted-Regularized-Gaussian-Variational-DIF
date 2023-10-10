@@ -1,28 +1,40 @@
+library(torch)
 library(matrixStats)
 
-J.dif <- list(c(4, 5, 12, 13), c(4:9, 12:17))
-ics <- c('aic', 'bic', 'gic')
-summarize <- function(sim, cond) {
-  J <- J.dif[[(cond - 1) %% 2  + 1]]
-  dif <- torch_stack(lapply(1:20, function(rep) {
-    load(paste0('GVEM_Sim', sim, '_Condition', cond, '_', rep, '.RData'))
+ics <- c('AIC', 'BIC', 'GIC')
+
+results <- lapply(1:8, function(r) {
+  j <- 20 * c(0.2, 0.6)[(r - 1) %% 2 + 1]
+  reps <- torch_stack(lapply(readRDS(paste0('simulation_', r, '.rds')), function(rep) {
     torch_stack(lapply(ics, function(ic) {
-      result <- eval(parse(text = paste0('result.', ic)))
-      #dif <- apply(result$gamma[-1, , ] != 0, 1:2, any) | (result$beta[-1, ] != 0)
-      dif <- result$beta[-1, ] != 0
-      d <- dif[, J]
+      beta <- rep[[paste0('result.', ic)]]$beta[-1, ]
+      gamma <- rep[[paste0('result.', ic)]]$gamma[-1, , ]
+      dif <- (beta != 0) | (rowSums(gamma != 0, dims = 2) != 0)
+      d <- dif[, 1:j]
       power <- c(mean(colAnys(d)), mean(d[1, ]), mean(d[2, ]))
-      d <- dif[, -J]
+      d <- dif[, -(1:j)]
       typeI <- c(mean(colAnys(d)), mean(d[1, ]), mean(d[2, ]))
-      rbind(power, typeI)
+      prop <- rbind(power, typeI)
+      colnames(prop) <- c('Omnibus', 'Low', 'High')
+      prop
     }))
   }))
-  setNames(lapply(dif$mean(1)$unbind(), function(mean) {
-    result <- as_array(mean)
-    rownames(result) <- c('Power', 'TypeI')
-    colnames(result) <- c('Total', 'LowDIF', 'HighDIF')
-    result
-  }), ics)
-}
+  props <- lapply(torch_cat(torch_std_mean(reps, 1))$unbind(), function(prop) {
+    prop <- as.array(prop)
+    rownames(prop) <- c('Power', 'TypeI')
+    colnames(prop) <- c('Omnibus', 'Low', 'High')
+    prop
+  })
+  mean <- setNames(props[4:6], ics)
+  sd <- setNames(props[1:3], ics)
+  list(mean = mean, sd = sd)
+})
 
-summarize(3, 8)
+results[[1]]$mean
+results[[2]]$mean
+results[[3]]$mean
+results[[4]]$mean
+results[[5]]$mean
+results[[6]]$mean
+results[[7]]$mean
+results[[8]]$mean
