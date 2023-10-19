@@ -3,7 +3,7 @@ library(matrixStats)
 
 ics <- c('AIC', 'BIC', 'GIC')
 
-results <- lapply(1:8, function(r) {
+results <- lapply(1:7, function(r) {
   j <- 20 * c(0.2, 0.6)[(r - 1) %% 2 + 1]
   reps <- torch_stack(lapply(readRDS(paste0('simulation_', r, '.rds')), function(rep) {
     torch_stack(lapply(ics, function(ic) {
