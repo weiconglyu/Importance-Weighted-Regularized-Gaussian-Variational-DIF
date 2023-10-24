@@ -122,9 +122,9 @@ EMM <- function(Y, D, X, lambda, iter = 1000, eps = 1e-3) {
   init()
   params.old <- NULL
   for (i in 1:iter) {
-    update(lambda, gamma.mask, beta.mask)
-    update(0, gamma != 0, beta != 0)
-    #update(0, gamma.mask, beta.mask)
+    # update(lambda, gamma.mask, beta.mask)
+    # update(0, gamma != 0, beta != 0)
+    update(0, gamma.mask, beta.mask)
     
     params <- parameters()
     if (!is.null(params.old) && all(distance(params, params.old) < eps))
@@ -178,7 +178,7 @@ IW <- function(Y, D, X, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, lambda, z, thet
   }
   
   adaprox <- function(x, state, params, lambda) {
-    psi <- sqrt(state$max_exp_avg_sq / (1 - params$betas[2] ^ state$step)) + params$eps
+    psi <- sqrt(state$exp_avg_sq / (1 - params$betas[2] ^ state$step)) + params$eps
     psi.max <- max(psi)
     psi <- psi / psi.max
     lambda <- params$lr / psi.max * lambda
@@ -194,7 +194,7 @@ IW <- function(Y, D, X, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, lambda, z, thet
   
   # adaprox <- function(x, state, params, lambda) {
   #   beta.t <- params$betas ^ state$step
-  #   lr <- params$lr / (1 - beta.t[1]) / (sqrt(state$max_exp_avg_sq / (1 - beta.t[2])) + params$eps)
+  #   lr <- params$lr / (1 - beta.t[1]) / (sqrt(state$exp_avg_sq / (1 - beta.t[2])) + params$eps)
   #   x$set_data(prox(x, lr * lambda))
   # }
   
@@ -212,7 +212,7 @@ IW <- function(Y, D, X, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, lambda, z, thet
     with(parent.frame(), {
       args <- sys.frame(-4)
       
-      opt <- optim_adam(list(gamma.v, beta.v, Sigma1.L.v, Sigma2.L.v, Mu.v, a.v, b), lr, amsgrad = T)
+      opt <- optim_adam(list(gamma.v, beta.v, Sigma1.L.v, Sigma2.L.v, Mu.v, a.v, b), lr)
       pars.old <- NULL
       for (j in 1:iter) {
         assemble()
@@ -241,6 +241,7 @@ IW <- function(Y, D, X, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, lambda, z, thet
           break
         pars.old <- pars
       }
+      print(j)
     })
   }
   

@@ -51,8 +51,8 @@ dat.nonunif <- unlist(lapply(c(500, 1000), function(n) {
     replicate(R, {
       a <- matrix(runif(J * 2, 1.5, 2.5), ncol = 2) * D
       a <- abind(a, a, a, along = 0)
-      a[-1, 1:(j / 2), ] <- a[-1, 1:(j / 2), ] + c(0.3, 0.6)
-      a[-1, (j / 2 + 1):j, ] <- a[-1, (j / 2 + 1):j, ] - c(0.3, 0.6)
+      a[-1, 1:(j / 2), ] <- a[-1, 1:(j / 2), ] + c(0.4, 0.8)
+      a[-1, (j / 2 + 1):j, ] <- a[-1, (j / 2 + 1):j, ] - c(0.4, 0.8)
       a[-1, , ] <- a[-1, , ] * abind(D, D, along = 0)
       b <- rnorm(J)
       b <- unname(rbind(b, b, b))
