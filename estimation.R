@@ -1,8 +1,5 @@
 library(torch)
 
-#rm(list = ls())
-#load('est.RData')
-
 `%*%.torch_tensor` <- function(e1, e2) {
   torch_matmul(e1, e2)
 }
@@ -177,26 +174,26 @@ IW <- function(Y, D, X, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, lambda, z, thet
     })
   }
   
-  adaprox <- function(x, state, params, lambda) {
-    psi <- sqrt(state$exp_avg_sq / (1 - params$betas[2] ^ state$step)) + params$eps
-    psi.max <- max(psi)
-    psi <- psi / psi.max
-    lambda <- params$lr / psi.max * lambda
-    z <- x
-    for (i in 1:iter) {
-      z.new <- prox(z - psi * (z - x), lambda)
-      if (as.array(max(abs(z.new - z))) < eps)
-        break
-      z <- z.new
-    }
-    x$set_data(z.new)
-  }
-  
-  # adaprox <- function(x, state, params, lambda) {
-  #   beta.t <- params$betas ^ state$step
-  #   lr <- params$lr / (1 - beta.t[1]) / (sqrt(state$exp_avg_sq / (1 - beta.t[2])) + params$eps)
-  #   x$set_data(prox(x, lr * lambda))
+  # proximal <- function(x, state, params, lambda) {
+  #   psi <- sqrt(state$exp_avg_sq / (1 - params$betas[2] ^ state$step)) + params$eps
+  #   psi.max <- max(psi)
+  #   psi <- psi / psi.max
+  #   lambda <- params$lr / psi.max * lambda
+  #   z <- x
+  #   for (i in 1:iter) {
+  #     z.new <- prox(z - psi * (z - x), lambda)
+  #     if (as.array(max(abs(z.new - z))) < eps)
+  #       break
+  #     z <- z.new
+  #   }
+  #   x$set_data(z.new)
   # }
+  
+  proximal <- function(x, state, params, lambda) {
+    beta.t <- params$betas ^ state$step
+    lr <- params$lr / (1 - beta.t[1]) / (sqrt(state$exp_avg_sq / (1 - beta.t[2])) + params$eps)
+    x$set_data(prox(x, lr * lambda))
+  }
   
   parameters <- function() {
     with_no_grad({
@@ -231,8 +228,8 @@ IW <- function(Y, D, X, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, lambda, z, thet
           opt$step()
           if (args$lambda != 0) {
             opt.state <- opt$state_dict()$state
-            adaprox(gamma.v, opt.state[[1]], opt$param_groups[[1]], args$lambda)
-            adaprox(beta.v, opt.state[[2]], opt$param_groups[[1]], args$lambda)
+            proximal(gamma.v, opt.state[[1]], opt$param_groups[[1]], args$lambda)
+            proximal(beta.v, opt.state[[2]], opt$param_groups[[1]], args$lambda)
           }
         })
 
@@ -246,20 +243,12 @@ IW <- function(Y, D, X, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, lambda, z, thet
   }
   
   init()
-  params.old <- NULL
-  for (i in 1:1) {
-    # z <- array(rnorm(N * S * M * K), c(N, S * M, K))
-    # theta.logd <- torch_tensor(rowSums(dnorm(z, log = T), dim = 2))
-    # theta <- (SIGMA.L %*% z)$squeeze(4) + MU
-    update(lambda, torch_ones_like(gamma.v)$bool(), torch_ones_like(beta.v)$bool())
-    update(0, gamma.v != 0, beta.v != 0)
-    
-    params <- parameters()
-    if (!is.null(params.old) && all(distance(params, params.old)[-1] < eps))
-      break
-    params.old <- params
-  }
-  c(n = i, params)
+  # z <- array(rnorm(N * S * M * K), c(N, S * M, K))
+  # theta.logd <- torch_tensor(rowSums(dnorm(z, log = T), dim = 2))
+  # theta <- (SIGMA.L %*% z)$squeeze(4) + MU
+  update(lambda, torch_ones_like(gamma.v)$bool(), torch_ones_like(beta.v)$bool())
+  update(0, gamma.v != 0, beta.v != 0)
+  parameters()
 }
 
 IC <- function(Y, X, SIGMA, MU, Sigma.L, Mu, a, b, gamma, beta, c, z, theta.logd, S, M) {
@@ -284,15 +273,6 @@ IC <- function(Y, X, SIGMA, MU, Sigma.L, Mu, a, b, gamma, beta, c, z, theta.logd
       distr_multivariate_normal(Mu[g], scale_tril = Sigma.L[g])$log_prob(theta[X == g])
     })) - theta.logd
   Q <- as.array((log.w$view(c(N, S, M))$logsumexp(3) - log(M))$mean(2)$sum())
-  
-  # AG <- (a + gamma)[X]$unsqueeze(4)
-  # AG.t <- t(AG)
-  # BB <- (b - beta)[X]
-  # xi <- sqrt(BB$square() - 2 * BB * (AG.t %*% MU$view(c(N, 1, -1, 1)))$view(c(N, -1)) + (AG.t %*% (SIGMA + t(MU) %*% MU)$unsqueeze(2) %*% AG)$view(c(N, -1)))
-  # MU$unsqueeze_(4)
-  # mu <- MU$squeeze(2) - Mu[X]$unsqueeze(3)
-  # Q <- as.array((nnf_logsigmoid(xi) + (0.5 - Y) * (BB - (AG.t %*% MU)$view(c(N, -1))) - xi / 2)$sum() - (Sigma$logdet()[X]$sum() + diagonal(linalg_solve(Sigma[X], SIGMA + mu %*% t(mu)))$sum()) / 2)
-
   l0 <- as.array(sum(gamma != 0) + sum(beta != 0))
   c(ll = Q, AIC = -2 * Q + l0 * 2, BIC = -2 * Q + l0 * log(N), GIC = -2 * Q + c * l0 * log(N) * log(log(N)))
 }
@@ -303,17 +283,6 @@ estimate <- function(Y, D, X, lambda0, c, z, S, M) {
   list2env(EMM(Y, D, X, lambda), environment())
   print(n)
   list2env(IW(Y, D, X, SIGMA, MU, Sigma, Mu, a, b, gamma, beta, lambda, z, theta.logd, S, M), environment())
-  print(n)
   list2env(as.list(IC(Y, X, SIGMA, MU, Sigma.L, Mu, a, b, gamma, beta, c, z, theta.logd, S, M)), environment())
   list(lambda0 = lambda0, lambda = lambda, SIGMA = SIGMA, MU = MU, Sigma = Sigma, Mu = Mu, a = a, b = b, gamma = gamma, beta = beta, ll = ll, AIC = AIC, BIC = BIC, GIC = GIC)
 }
-
-#est <- estimate(Y, D, X, 1, c)
-#est <- EMM(Y, D, X, lambda)
-#est <- EMM(Y, D, X, 0)
-
-# model <- mirt.model(D, COV = matrix(c(F, T, T, F), 2))
-# fit <- multipleGroup(as.data.frame(Y), model, as.character(X), '2PL')
-# coefs <- torch_stack(lapply(coef(fit), function(coef) {
-#   do.call(rbind, coef[1:20])[, 1:3]
-# }))
