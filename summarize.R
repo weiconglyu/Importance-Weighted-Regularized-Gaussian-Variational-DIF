@@ -1,7 +1,7 @@
 library(torch)
 library(matrixStats)
 
-raw <- lapply(1:3, function(r) {
+raw <- lapply(1:8, function(r) {
   N <- c(1500, 3000)[((r - 1) %% 4 > 1) + 1]
   J <- 20 * c(0.2, 0.6)[(r - 1) %% 2 + 1]
   rep <- readRDS(paste0('simulation_', r, '.rds'))
@@ -22,7 +22,7 @@ best <- lapply(raw, function(raw) {
   })
 })
 
-c.GIC <- 0.75
+c.GIC <- 0.7
 result <- lapply(raw, function(raw) {
   N <- raw$N
   J <- raw$J
